@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique @db.VarChar(50)
+  password     String   @db.VarChar(255)
+  role         UserRole @default(STAFF)
+  isActive     Boolean  @default(true) @map("is_active")
+  tokenVersion Int      @default(1) @map("token_version")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+model Service {
+  id                String    @id @default(cuid())
+  nameAr            String    @map("name_ar") @db.VarChar(120)
+  nameEn            String    @map("name_en") @db.VarChar(120)
+  description       String?   @db.VarChar(500)
+  estimatedDuration Int       @map("estimated_duration")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  bookings          Booking[]
+
+  @@map("services")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ServiceCategory {
+  MECHANICAL
+  ELECTRICAL
+  PAINT
+  BODY_REPAIR
+  DRY_ICE_CLEANING
+  OIL_CHANGE
+  INSPECTION
+  OTHER
+}
+
+model Booking {
+  id                 String          @id @default(cuid())
+  bookingNumber      String          @unique @map("booking_number") @db.VarChar(20)
+  customerName       String          @map("customer_name") @db.VarChar(120)
+  phone              String          @db.VarChar(20)
+  plateNumber        String          @map("plate_number") @db.VarChar(30)
+  vehicleMake        String          @map("vehicle_make") @db.VarChar(60)
+  vehicleModel       String          @map("vehicle_model") @db.VarChar(60)
+  vehicleYear        Int             @map("vehicle_year")
+  serviceId          String?         @map("service_id")
+  service            Service?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceCategory    ServiceCategory @map("service_category")
+  serviceDescription String          @map("service_description") @db.VarChar(500)
+  bookingDate        DateTime        @map("booking_date") @db.Date
+  bookingTime        String          @map("booking_time") @db.VarChar(5)
+  estimatedDuration  Int             @map("estimated_duration")
+  status             BookingStatus   @default(PENDING)
+  notes              String?         @db.VarChar(1000)
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  @@index([bookingDate])
+  @@index([status])
+  @@index([customerName])
+  @@index([plateNumber])
+  @@index([serviceCategory])
+  @@index([bookingDate, bookingTime])
+  @@index([serviceId])
+  @@map("bookings")
+}

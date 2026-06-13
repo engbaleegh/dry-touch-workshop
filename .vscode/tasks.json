@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev: تشغيل المشروع",
+      "type": "npm",
+      "script": "dev",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "isBackground": true,
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "db: إعداد قاعدة البيانات",
+      "type": "shell",
+      "command": "npx prisma db push && npm run db:seed",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "install: تثبيت الحزم",
+      "type": "npm",
+      "script": "install",
+      "problemMatcher": []
+    }
+  ]
+}
