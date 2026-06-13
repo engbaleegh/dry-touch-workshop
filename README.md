@@ -58,7 +58,18 @@ See `.env.example`. Required:
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Neon + Vercel setup.
+**Production:** https://dry-touch-workshop.vercel.app  
+**GitHub:** https://github.com/engbaleegh/dry-touch-workshop
+
+Vercel is connected to GitHub. Every push to `main` triggers an automatic production deployment.
+
+```bash
+git add .
+git commit -m "your message"
+git push origin main
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Neon + Vercel environment setup.
 
 ## License
 
