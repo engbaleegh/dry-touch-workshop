@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { getServices } from "@/actions/services";
@@ -9,12 +7,6 @@ import { ServicesTable } from "@/components/services/services-table";
 import { Button } from "@/components/ui/button";
 
 export default async function ServicesPage() {
-  try {
-    await requireAdmin();
-  } catch {
-    redirect("/dashboard/forbidden");
-  }
-
   const services = await getServices();
   const locale = await getLocale();
   const dict = getDictionary(locale);

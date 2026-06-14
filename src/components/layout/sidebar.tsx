@@ -41,7 +41,7 @@ const allNavItems = [
     href: "/dashboard/services",
     icon: Wrench,
     key: "services" as const,
-    roles: ["ADMIN"] as UserRole[],
+    roles: ["ADMIN", "STAFF"] as UserRole[],
   },
   {
     href: "/dashboard/users",
@@ -53,7 +53,7 @@ const allNavItems = [
     href: "/dashboard/calendar",
     icon: CalendarDays,
     key: "calendar" as const,
-    roles: ["ADMIN"] as UserRole[],
+    roles: ["ADMIN", "STAFF"] as UserRole[],
   },
   {
     href: "/dashboard/reports",

@@ -3,14 +3,12 @@ import type { UserRole } from "@prisma/client";
 /** Routes STAFF may access under /dashboard */
 const STAFF_ALLOWED_PREFIXES = [
   "/dashboard/bookings",
+  "/dashboard/calendar",
+  "/dashboard/services",
   "/dashboard/reports",
 ] as const;
 
-const ADMIN_ONLY_PREFIXES = [
-  "/dashboard/users",
-  "/dashboard/services",
-  "/dashboard/settings",
-] as const;
+const ADMIN_ONLY_PREFIXES = ["/dashboard/users", "/dashboard/settings"] as const;
 
 export function isAdminOnlyPath(pathname: string): boolean {
   return ADMIN_ONLY_PREFIXES.some(

@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { serviceSchema } from "@/lib/validations/service";
 import type { ActionState } from "./auth";
 
 export async function getServices(includeInactive = true) {
-  await requireAdmin();
+  await requireAuth();
   return prisma.service.findMany({
     where: includeInactive ? undefined : { isActive: true },
     orderBy: { nameEn: "asc" },
@@ -41,7 +41,7 @@ export async function getServicesForBooking(bookingServiceId?: string | null) {
 }
 
 export async function getServiceById(id: string) {
-  await requireAdmin();
+  await requireAuth();
   return prisma.service.findUnique({ where: { id } });
 }
 
@@ -49,7 +49,7 @@ export async function createServiceAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireAuth();
 
   const parsed = serviceSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { error: "validation" };
@@ -65,7 +65,7 @@ export async function updateServiceAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireAuth();
 
   const parsed = serviceSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { error: "validation" };
@@ -77,7 +77,7 @@ export async function updateServiceAction(
 }
 
 export async function deleteServiceAction(id: string): Promise<ActionState> {
-  await requireAdmin();
+  await requireAuth();
 
   const inUse = await prisma.booking.count({ where: { serviceId: id } });
   if (inUse > 0) {
@@ -97,7 +97,7 @@ export async function toggleServiceAction(
   id: string,
   isActive: boolean
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireAuth();
   await prisma.service.update({ where: { id }, data: { isActive } });
   revalidatePath("/dashboard/services");
   return { success: true };
