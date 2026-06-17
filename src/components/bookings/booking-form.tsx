@@ -1,9 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { createBookingAction, updateBookingAction } from "@/actions/bookings";
-import { fetchAvailableSlots } from "@/actions/bookings";
-import type { ActionState } from "@/actions/auth";
+import {
+  createBookingAction,
+  updateBookingAction,
+  fetchAvailableSlots,
+  type BookingActionState,
+} from "@/actions/bookings";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { Button } from "../ui/button";
@@ -12,12 +15,43 @@ import { getStatusLabel } from "@/i18n";
 import { BOOKING_STATUSES } from "@/lib/constants";
 import type { Booking, Service } from "@prisma/client";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
-const initialState: ActionState = {};
+const initialState: BookingActionState = {};
 
 interface BookingFormProps {
   booking?: Booking;
   services: Service[];
+}
+
+function bookingToValues(
+  booking: Booking | undefined,
+  services: Service[]
+): Record<string, string> {
+  const initialService =
+    services.find((s) => s.id === booking?.serviceId) ?? null;
+
+  return {
+    customerName: booking?.customerName ?? "",
+    phone: booking?.phone ?? "",
+    plateNumber: booking?.plateNumber ?? "",
+    vehicleMake: booking?.vehicleMake ?? "",
+    vehicleModel: booking?.vehicleModel ?? "",
+    vehicleYear: booking?.vehicleYear ? String(booking.vehicleYear) : "",
+    serviceId: booking?.serviceId ?? initialService?.id ?? "",
+    status: booking?.status ?? "PENDING",
+    serviceDescription:
+      booking?.serviceDescription ?? initialService?.description ?? "",
+    bookingDate: booking
+      ? format(new Date(booking.bookingDate), "yyyy-MM-dd")
+      : "",
+    bookingTime: booking?.bookingTime ?? "",
+    repairDuration: booking?.repairDuration ?? "",
+    notes: booking?.notes ?? "",
+    estimatedDuration: String(
+      booking?.estimatedDuration ?? initialService?.estimatedDuration ?? 60
+    ),
+  };
 }
 
 export function BookingForm({ booking, services }: BookingFormProps) {
@@ -30,47 +64,78 @@ export function BookingForm({ booking, services }: BookingFormProps) {
 
   const [state, formAction, pending] = useActionState(action, initialState);
 
-  const initialService =
-    services.find((s) => s.id === booking?.serviceId) ?? services[0];
+  const defaults = bookingToValues(booking, services);
 
-  const [serviceId, setServiceId] = useState(initialService?.id ?? "");
-  const [bookingDate, setBookingDate] = useState(
-    booking
-      ? format(new Date(booking.bookingDate), "yyyy-MM-dd")
-      : format(new Date(), "yyyy-MM-dd")
+  const [customerName, setCustomerName] = useState(defaults.customerName);
+  const [phone, setPhone] = useState(defaults.phone);
+  const [plateNumber, setPlateNumber] = useState(defaults.plateNumber);
+  const [vehicleMake, setVehicleMake] = useState(defaults.vehicleMake);
+  const [vehicleModel, setVehicleModel] = useState(defaults.vehicleModel);
+  const [vehicleYear, setVehicleYear] = useState(defaults.vehicleYear);
+  const [serviceId, setServiceId] = useState(defaults.serviceId);
+  const [status, setStatus] = useState(defaults.status);
+  const [description, setDescription] = useState(defaults.serviceDescription);
+  const [bookingDate, setBookingDate] = useState(defaults.bookingDate);
+  const [bookingTime, setBookingTime] = useState(defaults.bookingTime);
+  const [repairDuration, setRepairDuration] = useState(defaults.repairDuration);
+  const [notes, setNotes] = useState(defaults.notes);
+  const [slotDuration, setSlotDuration] = useState(
+    Number(defaults.estimatedDuration)
   );
-  const [duration, setDuration] = useState(
-    booking?.estimatedDuration ?? initialService?.estimatedDuration ?? 60
-  );
-  const [description, setDescription] = useState(
-    booking?.serviceDescription ?? initialService?.description ?? ""
-  );
-  const [bookingTime, setBookingTime] = useState(booking?.bookingTime ?? "");
   const [slots, setSlots] = useState<string[]>([]);
   const [loadingSlots, startSlotTransition] = useTransition();
 
   useEffect(() => {
-    if (!bookingDate || duration < 15) return;
+    if (!state.values) return;
+
+    const v = state.values;
+    if (v.customerName !== undefined) setCustomerName(v.customerName);
+    if (v.phone !== undefined) setPhone(v.phone);
+    if (v.plateNumber !== undefined) setPlateNumber(v.plateNumber);
+    if (v.vehicleMake !== undefined) setVehicleMake(v.vehicleMake);
+    if (v.vehicleModel !== undefined) setVehicleModel(v.vehicleModel);
+    if (v.vehicleYear !== undefined) setVehicleYear(v.vehicleYear);
+    if (v.serviceId !== undefined) setServiceId(v.serviceId);
+    if (v.status !== undefined) setStatus(v.status);
+    if (v.serviceDescription !== undefined) setDescription(v.serviceDescription);
+    if (v.bookingDate !== undefined) setBookingDate(v.bookingDate);
+    if (v.bookingTime !== undefined) setBookingTime(v.bookingTime);
+    if (v.repairDuration !== undefined) setRepairDuration(v.repairDuration);
+    if (v.notes !== undefined) setNotes(v.notes);
+    if (v.estimatedDuration !== undefined) {
+      setSlotDuration(Number(v.estimatedDuration) || 60);
+    }
+  }, [state.values]);
+
+  useEffect(() => {
+    if (!bookingDate.trim() || slotDuration < 15) {
+      setSlots([]);
+      return;
+    }
 
     startSlotTransition(async () => {
       const available = await fetchAvailableSlots(
         bookingDate,
-        duration,
+        slotDuration,
         booking?.id
       );
       setSlots(available);
-      if (available.length && !available.includes(bookingTime)) {
-        setBookingTime(available[0]);
-      }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bookingTime is updated by this effect
-  }, [bookingDate, duration, booking?.id]);
+  }, [bookingDate, slotDuration, booking?.id]);
+
+  const validation = dict.bookings.validation;
+
+  const fieldError = (field: string) => {
+    const key = state.fieldErrors?.[field];
+    if (!key) return undefined;
+    return validation[key as keyof typeof validation] ?? key;
+  };
 
   const handleServiceChange = (id: string) => {
     setServiceId(id);
     const service = services.find((s) => s.id === id);
     if (service) {
-      setDuration(service.estimatedDuration);
+      setSlotDuration(service.estimatedDuration);
       if (service.description) setDescription(service.description);
     }
   };
@@ -80,21 +145,32 @@ export function BookingForm({ booking, services }: BookingFormProps) {
     label: getStatusLabel(dict, s),
   }));
 
-  const serviceOptions = services.map((s) => ({
-    value: s.id,
-    label: locale === "ar" ? s.nameAr : s.nameEn,
-  }));
+  const serviceOptions = [
+    { value: "", label: dict.bookings.noService },
+    ...services.map((s) => ({
+      value: s.id,
+      label: locale === "ar" ? s.nameAr : s.nameEn,
+    })),
+  ];
+
+  const textareaClass = (field: string) =>
+    cn(
+      "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20",
+      fieldError(field) && "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+    );
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-6" noValidate>
+      <input type="hidden" name="estimatedDuration" value={slotDuration} />
+
       {state.error === "slotConflict" && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {dict.bookings.slotConflict}
         </div>
       )}
-      {state.error === "validation" && (
+      {state.error === "saveFailed" && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {dict.common.error}
+          {dict.bookings.saveFailed}
         </div>
       )}
 
@@ -102,39 +178,45 @@ export function BookingForm({ booking, services }: BookingFormProps) {
         <Input
           name="customerName"
           label={dict.bookings.customerName}
-          defaultValue={booking?.customerName}
-          required
+          value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          error={fieldError("customerName")}
         />
         <Input
           name="phone"
           label={dict.bookings.phone}
-          defaultValue={booking?.phone}
-          required
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          error={fieldError("phone")}
         />
         <Input
           name="plateNumber"
           label={dict.bookings.plateNumber}
-          defaultValue={booking?.plateNumber}
-          required
+          value={plateNumber}
+          onChange={(e) => setPlateNumber(e.target.value)}
+          error={fieldError("plateNumber")}
         />
         <Input
           name="vehicleMake"
           label={dict.bookings.vehicleMake}
-          defaultValue={booking?.vehicleMake}
-          required
+          value={vehicleMake}
+          onChange={(e) => setVehicleMake(e.target.value)}
+          error={fieldError("vehicleMake")}
         />
         <Input
           name="vehicleModel"
           label={dict.bookings.vehicleModel}
-          defaultValue={booking?.vehicleModel}
-          required
+          value={vehicleModel}
+          onChange={(e) => setVehicleModel(e.target.value)}
+          error={fieldError("vehicleModel")}
         />
         <Input
           name="vehicleYear"
           type="number"
           label={dict.bookings.vehicleYear}
-          defaultValue={booking?.vehicleYear}
-          required
+          value={vehicleYear}
+          onChange={(e) => setVehicleYear(e.target.value)}
+          error={fieldError("vehicleYear")}
         />
         <Select
           name="serviceId"
@@ -142,14 +224,15 @@ export function BookingForm({ booking, services }: BookingFormProps) {
           value={serviceId}
           onChange={(e) => handleServiceChange(e.target.value)}
           options={serviceOptions}
-          required
+          error={fieldError("serviceId")}
         />
         <Select
           name="status"
           label={dict.bookings.status}
-          defaultValue={booking?.status ?? "PENDING"}
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
           options={statusOptions}
-          required
+          error={fieldError("status")}
         />
       </div>
 
@@ -161,10 +244,14 @@ export function BookingForm({ booking, services }: BookingFormProps) {
           name="serviceDescription"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          required
           rows={3}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          className={textareaClass("serviceDescription")}
         />
+        {fieldError("serviceDescription") && (
+          <p className="mt-1 text-xs font-medium text-red-600">
+            {fieldError("serviceDescription")}
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -174,18 +261,15 @@ export function BookingForm({ booking, services }: BookingFormProps) {
           label={dict.bookings.bookingDate}
           value={bookingDate}
           onChange={(e) => setBookingDate(e.target.value)}
-          required
+          error={fieldError("bookingDate")}
         />
         <Input
-          name="estimatedDuration"
-          type="number"
-          label={dict.bookings.estimatedDuration}
-          value={duration}
-          onChange={(e) => setDuration(Number(e.target.value))}
-          min={15}
-          max={480}
-          step={15}
-          required
+          name="repairDuration"
+          label={dict.bookings.repairDuration}
+          value={repairDuration}
+          onChange={(e) => setRepairDuration(e.target.value)}
+          error={fieldError("repairDuration")}
+          placeholder={dict.bookings.repairDurationPlaceholder}
         />
         <div className="space-y-1">
           <label className="block text-sm font-medium text-slate-700">
@@ -195,8 +279,11 @@ export function BookingForm({ booking, services }: BookingFormProps) {
             name="bookingTime"
             value={bookingTime}
             onChange={(e) => setBookingTime(e.target.value)}
-            required
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            className={cn(
+              "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm",
+              fieldError("bookingTime") &&
+                "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+            )}
           >
             <option value="">{dict.bookings.selectSlot}</option>
             {slots.map((slot) => (
@@ -204,7 +291,17 @@ export function BookingForm({ booking, services }: BookingFormProps) {
                 {slot}
               </option>
             ))}
+            {bookingTime &&
+              !slots.includes(bookingTime) &&
+              /^\d{2}:\d{2}$/.test(bookingTime) && (
+                <option value={bookingTime}>{bookingTime}</option>
+              )}
           </select>
+          {fieldError("bookingTime") && (
+            <p className="text-xs font-medium text-red-600">
+              {fieldError("bookingTime")}
+            </p>
+          )}
           {loadingSlots && (
             <p className="text-xs text-slate-500">{dict.common.loading}</p>
           )}
@@ -222,10 +319,16 @@ export function BookingForm({ booking, services }: BookingFormProps) {
         </label>
         <textarea
           name="notes"
-          defaultValue={booking?.notes ?? ""}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          className={textareaClass("notes")}
         />
+        {fieldError("notes") && (
+          <p className="mt-1 text-xs font-medium text-red-600">
+            {fieldError("notes")}
+          </p>
+        )}
       </div>
 
       <div className="flex gap-3">

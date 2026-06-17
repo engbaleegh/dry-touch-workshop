@@ -58,6 +58,16 @@
     "bookingDate": "تاريخ الحجز",
     "bookingTime": "وقت الحجز",
     "estimatedDuration": "المدة (دقيقة)",
+    "repairDuration": "مدة الإصلاح",
+    "repairDurationPlaceholder": "مثال: 3-5 أيام، أسبوع تقريباً",
+    "noService": "— بدون خدمة —",
+    "saveFailed": "تعذر حفظ الحجز. يرجى المحاولة مرة أخرى.",
+    "validation": {
+      "customerNameRequired": "اسم العميل مطلوب",
+      "bookingDateInvalid": "تاريخ الحجز غير صالح",
+      "bookingTimeInvalid": "وقت الحجز غير صالح",
+      "serviceInvalid": "الخدمة غير صالحة"
+    },
     "status": "الحالة",
     "notes": "ملاحظات",
     "actions": "إجراءات",

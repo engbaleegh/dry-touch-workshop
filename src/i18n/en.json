@@ -58,6 +58,16 @@
     "bookingDate": "Booking Date",
     "bookingTime": "Booking Time",
     "estimatedDuration": "Duration (min)",
+    "repairDuration": "Repair Duration",
+    "repairDurationPlaceholder": "e.g. 3-5 days, approximately one week",
+    "noService": "— No service —",
+    "saveFailed": "Could not save the booking. Please try again.",
+    "validation": {
+      "customerNameRequired": "Customer name is required",
+      "bookingDateInvalid": "Booking date is invalid",
+      "bookingTimeInvalid": "Booking time is invalid",
+      "serviceInvalid": "Service is invalid"
+    },
     "status": "Status",
     "notes": "Notes",
     "actions": "Actions",

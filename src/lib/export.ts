@@ -38,6 +38,7 @@ export function exportBookingsToExcel(
     [dict.bookings.serviceDescription]: b.serviceDescription,
     [dict.bookings.bookingDate]: formatDate(b.bookingDate, locale),
     [dict.bookings.bookingTime]: b.bookingTime,
+    [dict.bookings.repairDuration]: b.repairDuration ?? "",
     [dict.bookings.estimatedDuration]: b.estimatedDuration,
     [dict.bookings.status]: getStatusLabel(dict, b.status),
     [dict.bookings.notes]: b.notes ?? "",

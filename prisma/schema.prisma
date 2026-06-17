@@ -75,6 +75,7 @@ model Booking {
   bookingDate        DateTime        @map("booking_date") @db.Date
   bookingTime        String          @map("booking_time") @db.VarChar(5)
   estimatedDuration  Int             @map("estimated_duration")
+  repairDuration     String?         @map("repair_duration") @db.VarChar(500)
   status             BookingStatus   @default(PENDING)
   notes              String?         @db.VarChar(1000)
   createdAt          DateTime        @default(now()) @map("created_at")

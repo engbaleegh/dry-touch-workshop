@@ -42,10 +42,19 @@ export default async function BookingDetailPage({ params }: PageProps) {
       label: dict.bookings.bookingDate,
       value: `${formatDate(booking.bookingDate, dateLocale)} ${booking.bookingTime}`,
     },
-    {
-      label: dict.bookings.estimatedDuration,
-      value: `${booking.estimatedDuration} ${dict.common.minutes}`,
-    },
+    ...(booking.repairDuration
+      ? [
+          {
+            label: dict.bookings.repairDuration,
+            value: booking.repairDuration,
+          },
+        ]
+      : [
+          {
+            label: dict.bookings.estimatedDuration,
+            value: `${booking.estimatedDuration} ${dict.common.minutes}`,
+          },
+        ]),
     { label: dict.bookings.notes, value: booking.notes || "—" },
   ];
 

@@ -15,6 +15,58 @@ import { buildBookingWhere } from "@/lib/booking-query";
 import { PAGE_SIZE } from "@/lib/constants";
 import type { BookingStatus, Prisma, ServiceCategory } from "@prisma/client";
 import type { ActionState } from "./auth";
+import type { ZodError } from "zod";
+
+export type BookingActionState = ActionState & {
+  fieldErrors?: Record<string, string>;
+  values?: Record<string, string>;
+};
+
+function formDataToValues(
+  raw: Record<string, FormDataEntryValue>
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") values[key] = value;
+  }
+  return values;
+}
+
+function zodToFieldErrors(error: ZodError): Record<string, string> {
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const field = issue.path[0];
+    if (typeof field === "string" && !fieldErrors[field]) {
+      fieldErrors[field] = issue.message;
+    }
+  }
+  return fieldErrors;
+}
+
+function parseBookingDate(
+  dateStr: string
+): { date: Date } | { error: string } {
+  if (!dateStr.trim()) {
+    return { date: startOfDay(new Date()) };
+  }
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) {
+    return { error: "bookingDateInvalid" };
+  }
+  return { date: startOfDay(parsed) };
+}
+
+function parseBookingTime(
+  timeStr: string
+): { time: string; userProvided: boolean; error?: string } {
+  if (!timeStr.trim()) {
+    return { time: "09:00", userProvided: false };
+  }
+  if (!/^\d{2}:\d{2}$/.test(timeStr)) {
+    return { time: timeStr, userProvided: true, error: "bookingTimeInvalid" };
+  }
+  return { time: timeStr, userProvided: true };
+}
 
 async function resolveServiceData(serviceId: string, bookingId?: string) {
   const service = await prisma.service.findUnique({ where: { id: serviceId } });
@@ -30,114 +82,223 @@ async function resolveServiceData(serviceId: string, bookingId?: string) {
   return null;
 }
 
+async function persistBooking(
+  data: {
+    customerName: string;
+    phone: string;
+    plateNumber: string;
+    vehicleMake: string;
+    vehicleModel: string;
+    vehicleYear: number;
+    serviceId: string | null;
+    serviceDescription: string;
+    bookingDate: Date;
+    bookingTime: string;
+    estimatedDuration: number;
+    repairDuration: string | null;
+    status: BookingStatus;
+    notes: string | null;
+  },
+  bookingId?: string
+): Promise<BookingActionState | void> {
+  try {
+    if (bookingId) {
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data,
+      });
+    } else {
+      const bookingNumber = await generateBookingNumber(data.bookingDate);
+      await prisma.booking.create({
+        data: {
+          bookingNumber,
+          serviceCategory: "OTHER" as ServiceCategory,
+          ...data,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Booking save failed:", err);
+    return { error: "saveFailed" };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
+  revalidatePath("/dashboard/calendar");
+}
+
 export async function createBookingAction(
-  _prev: ActionState,
+  _prev: BookingActionState,
   formData: FormData
-): Promise<ActionState> {
+): Promise<BookingActionState> {
   await requireAuth();
 
   const raw = Object.fromEntries(formData.entries());
+  const values = formDataToValues(raw);
   const parsed = bookingSchema.safeParse(raw);
 
   if (!parsed.success) {
-    return { error: "validation" };
+    return { fieldErrors: zodToFieldErrors(parsed.error), values };
   }
 
-  const bookingDate = startOfDay(new Date(parsed.data.bookingDate));
-
-  const slotCheck = await checkSlotAvailability(
-    bookingDate,
-    parsed.data.bookingTime,
-    parsed.data.estimatedDuration
-  );
-
-  if (!slotCheck.available) {
-    return { error: "slotConflict" };
+  const dateResult = parseBookingDate(parsed.data.bookingDate);
+  if ("error" in dateResult) {
+    return {
+      fieldErrors: { bookingDate: dateResult.error },
+      values,
+    };
   }
 
-  const service = await resolveServiceData(parsed.data.serviceId);
-  if (!service) return { error: "validation" };
+  const timeResult = parseBookingTime(parsed.data.bookingTime);
+  if (timeResult.error) {
+    return {
+      fieldErrors: { bookingTime: timeResult.error },
+      values,
+    };
+  }
 
-  const bookingNumber = await generateBookingNumber(bookingDate);
+  let serviceId: string | null = null;
+  let estimatedDuration = parsed.data.estimatedDuration;
 
-  await prisma.booking.create({
-    data: {
-      bookingNumber,
+  if (parsed.data.serviceId) {
+    const service = await resolveServiceData(parsed.data.serviceId);
+    if (!service) {
+      return {
+        fieldErrors: { serviceId: "serviceInvalid" },
+        values,
+      };
+    }
+    serviceId = service.id;
+    estimatedDuration = service.estimatedDuration;
+  }
+
+  const userProvidedSlot =
+    parsed.data.bookingDate.trim() !== "" &&
+    parsed.data.bookingTime.trim() !== "";
+
+  if (userProvidedSlot) {
+    const slotCheck = await checkSlotAvailability(
+      dateResult.date,
+      timeResult.time,
+      estimatedDuration
+    );
+    if (!slotCheck.available) {
+      return { error: "slotConflict", values };
+    }
+  }
+
+  const saveResult = await persistBooking(
+    {
       customerName: parsed.data.customerName,
       phone: parsed.data.phone,
       plateNumber: parsed.data.plateNumber,
       vehicleMake: parsed.data.vehicleMake,
       vehicleModel: parsed.data.vehicleModel,
       vehicleYear: parsed.data.vehicleYear,
-      serviceId: service.id,
-      serviceCategory: "OTHER" as ServiceCategory,
+      serviceId,
       serviceDescription: parsed.data.serviceDescription,
-      bookingDate,
-      bookingTime: parsed.data.bookingTime,
-      estimatedDuration: parsed.data.estimatedDuration,
+      bookingDate: dateResult.date,
+      bookingTime: timeResult.time,
+      estimatedDuration,
+      repairDuration: parsed.data.repairDuration.trim() || null,
       status: parsed.data.status as BookingStatus,
-      notes: parsed.data.notes || null,
-    },
-  });
+      notes: parsed.data.notes ?? null,
+    }
+  );
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/bookings");
-  revalidatePath("/dashboard/calendar");
+  if (saveResult) {
+    return { ...saveResult, values };
+  }
+
   redirect("/dashboard/bookings");
 }
 
 export async function updateBookingAction(
   id: string,
-  _prev: ActionState,
+  _prev: BookingActionState,
   formData: FormData
-): Promise<ActionState> {
+): Promise<BookingActionState> {
   await requireAuth();
 
   const raw = Object.fromEntries(formData.entries());
+  const values = formDataToValues(raw);
   const parsed = bookingSchema.safeParse(raw);
 
   if (!parsed.success) {
-    return { error: "validation" };
+    return { fieldErrors: zodToFieldErrors(parsed.error), values };
   }
 
-  const bookingDate = startOfDay(new Date(parsed.data.bookingDate));
-
-  const slotCheck = await checkSlotAvailability(
-    bookingDate,
-    parsed.data.bookingTime,
-    parsed.data.estimatedDuration,
-    id
-  );
-
-  if (!slotCheck.available) {
-    return { error: "slotConflict" };
+  const dateResult = parseBookingDate(parsed.data.bookingDate);
+  if ("error" in dateResult) {
+    return {
+      fieldErrors: { bookingDate: dateResult.error },
+      values,
+    };
   }
 
-  const service = await resolveServiceData(parsed.data.serviceId, id);
-  if (!service) return { error: "validation" };
+  const timeResult = parseBookingTime(parsed.data.bookingTime);
+  if (timeResult.error) {
+    return {
+      fieldErrors: { bookingTime: timeResult.error },
+      values,
+    };
+  }
 
-  await prisma.booking.update({
-    where: { id },
-    data: {
+  let serviceId: string | null = null;
+  let estimatedDuration = parsed.data.estimatedDuration;
+
+  if (parsed.data.serviceId) {
+    const service = await resolveServiceData(parsed.data.serviceId, id);
+    if (!service) {
+      return {
+        fieldErrors: { serviceId: "serviceInvalid" },
+        values,
+      };
+    }
+    serviceId = service.id;
+    estimatedDuration = service.estimatedDuration;
+  }
+
+  const userProvidedSlot =
+    parsed.data.bookingDate.trim() !== "" &&
+    parsed.data.bookingTime.trim() !== "";
+
+  if (userProvidedSlot) {
+    const slotCheck = await checkSlotAvailability(
+      dateResult.date,
+      timeResult.time,
+      estimatedDuration,
+      id
+    );
+    if (!slotCheck.available) {
+      return { error: "slotConflict", values };
+    }
+  }
+
+  const saveResult = await persistBooking(
+    {
       customerName: parsed.data.customerName,
       phone: parsed.data.phone,
       plateNumber: parsed.data.plateNumber,
       vehicleMake: parsed.data.vehicleMake,
       vehicleModel: parsed.data.vehicleModel,
       vehicleYear: parsed.data.vehicleYear,
-      serviceId: service.id,
+      serviceId,
       serviceDescription: parsed.data.serviceDescription,
-      bookingDate,
-      bookingTime: parsed.data.bookingTime,
-      estimatedDuration: parsed.data.estimatedDuration,
+      bookingDate: dateResult.date,
+      bookingTime: timeResult.time,
+      estimatedDuration,
+      repairDuration: parsed.data.repairDuration.trim() || null,
       status: parsed.data.status as BookingStatus,
-      notes: parsed.data.notes || null,
+      notes: parsed.data.notes ?? null,
     },
-  });
+    id
+  );
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/bookings");
-  revalidatePath("/dashboard/calendar");
+  if (saveResult) {
+    return { ...saveResult, values };
+  }
+
   redirect("/dashboard/bookings?updated=1");
 }
 
@@ -191,7 +352,10 @@ export async function fetchAvailableSlots(
   excludeId?: string
 ) {
   await requireAuth();
-  const date = startOfDay(new Date(dateStr));
+  if (!dateStr.trim()) return [];
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return [];
+  const date = startOfDay(parsed);
   return getAvailableSlots(date, duration, excludeId);
 }
 
